@@ -31,7 +31,7 @@ def palm_410m_8k_v0():
         num_tokens=num_tokens, dim=dim, depth=depth, dim_head=dim_head, heads=heads, flash_attn=flash_attn
     )
 
-    hf_url = 'https://huggingface.co/conceptofmind/palm-150m/resolve/main/palm_410m_8k_v0.pt'
+    hf_url = 'https://huggingface.co/conceptofmind/palm-410m/resolve/main/palm_410m_8k_v0.pt'
     state_dict = torch.hub.load_state_dict_from_url(hf_url)
     model.load_state_dict(state_dict)
 
@@ -49,7 +49,7 @@ def palm_1b_8k_v0():
         num_tokens=num_tokens, dim=dim, depth=depth, dim_head=dim_head, heads=heads, flash_attn=flash_attn
     )
 
-    hf_url = 'https://huggingface.co/conceptofmind/palm-150m/resolve/main/palm_1b_8k_v0.pt'
+    hf_url = 'https://huggingface.co/conceptofmind/palm-1b/resolve/main/palm_1b_8k_v0.pt'
     state_dict = torch.hub.load_state_dict_from_url(hf_url)
     model.load_state_dict(state_dict)
 
