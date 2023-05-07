@@ -1,5 +1,3 @@
-#dependencies = ['torch', 'palm-rlhf-pytorch', 'accelerate', 'beartype', 'einops', 'lion-pytorch', 'tqdm']
-
 import torch
 from palm_rlhf_pytorch import PaLM
 
@@ -15,8 +13,8 @@ def palm_150m_8k_v0():
         num_tokens=num_tokens, dim=dim, depth=depth, dim_head=dim_head, heads=heads, flash_attn=flash_attn
     )
 
-    huggingface_url = 'https://huggingface.co/conceptofmind/palm-150m/resolve/main/palm_150m_8k_v0.pt'
-    state_dict = torch.hub.load_state_dict_from_url(huggingface_url)
+    hf_url = 'https://huggingface.co/conceptofmind/palm-150m/resolve/main/palm_150m_8k_v0.pt'
+    state_dict = torch.hub.load_state_dict_from_url(hf_url)
     model.load_state_dict(state_dict)
 
     return model
