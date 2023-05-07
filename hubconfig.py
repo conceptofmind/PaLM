@@ -1,7 +1,7 @@
 import torch
 from palm_rlhf_pytorch import PaLM
 
-dependencies = ['torch']
+dependencies = ['torch', 'palm-rlhf-pytorch']
 
 def palm_model():
     num_tokens = 50304
@@ -14,7 +14,7 @@ def palm_model():
         num_tokens=num_tokens, dim=dim, depth=depth, dim_head=dim_head, heads=heads
     )
 
-    huggingface_url = 'https://huggingface.co/conceptofmind/palm-1b/blob/main/palm_150m_8k_v0.pt'
+    huggingface_url = 'https://huggingface.co/conceptofmind/palm-1b/main/palm_150m_8k_v0.pt'
     state_dict = torch.hub.load_state_dict_from_url(huggingface_url, progress=True)
     model.load_state_dict(state_dict)
 
