@@ -5,8 +5,8 @@ from palm_rlhf_pytorch import PaLM
 
 def palm_model():
     num_tokens = 50304
-    dim = 2048
-    depth = 16
+    dim = 768
+    depth = 12
     dim_head = 128
     heads = 8
 
