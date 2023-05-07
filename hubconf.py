@@ -1,4 +1,4 @@
-dependencies = ['torch', 'palm-rlhf-pytorch', 'accelerate', 'beartype', 'einops', 'lion-pytorch', 'tqdm']
+#dependencies = ['torch', 'palm-rlhf-pytorch', 'accelerate', 'beartype', 'einops', 'lion-pytorch', 'tqdm']
 
 import torch
 from palm_rlhf_pytorch import PaLM
