@@ -1,7 +1,7 @@
+dependencies = ['torch', 'palm-rlhf-pytorch']
+
 import torch
 from palm_rlhf_pytorch import PaLM
-
-dependencies = ['torch', 'palm-rlhf-pytorch']
 
 def palm_model():
     num_tokens = 50304
