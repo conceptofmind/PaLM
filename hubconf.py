@@ -14,8 +14,8 @@ def palm_model():
         num_tokens=num_tokens, dim=dim, depth=depth, dim_head=dim_head, heads=heads
     )
 
-    huggingface_url = 'https://huggingface.co/conceptofmind/palm-150m/source/main/palm_150_v0.bin'
-    state_dict = torch.hub.load_state_dict_from_url(huggingface_url, progress=True)
+    huggingface_url = 'https://huggingface.co/conceptofmind/palm-150m/main/palm_150_v0.bin'
+    state_dict = torch.hub.load_state_dict_from_url(huggingface_url)
     model.load_state_dict(state_dict)
 
     return model
