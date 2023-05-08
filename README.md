@@ -1,5 +1,5 @@
 # PaLM
-<a href="">
+<a href=""></a>
 
 ## Acknowledgements
 - <a href="https://github.com/CarperAI">CarperAI</a>, <a href="https://twitter.com/lcastricato">Louis Castricato</a>, and <a href="https://stability.ai/">Stability.ai</a> for the very generous sponsorship to work on machine learning research.
@@ -9,7 +9,11 @@
 
 
 ## FAQ
-Three different size PaLM models (150m, 410m, 1b) have been trained with 8k context length on all of <a href="https://twitter.com/dmayhem93">C4</a>. The models were trained with <a href="https://github.com/HazyResearch/flash-attention">Flash Attention</a> and <a href="https://arxiv.org/abs/2212.10554">Xpos Rotary Embeddings</a> for better length extrapolation. The models have been uploaded to Torch hub and the files are additionally stored on the Huggingface hub. You can find the model each of the PyTorch model files here: <a href="https://huggingface.co/conceptofmind/palm-150m">PaLM-150m</a>, <a href="https://huggingface.co/conceptofmind/palm-410m">PaLM-410m</a>, <a href="https://huggingface.co/conceptofmind/palm-1b">PaLM-1b</a>. If the models are not downloading from Torch hub correctly be sure to clear out the checkpoint and model folders in `.cache/torch/hub`. If that still does not resolve the issue then you can download the files from the Huggingface repositories.
+Three different size PaLM models (150m, 410m, 1b) have been trained with 8k context length on all of <a href="https://huggingface.co/datasets/c4">C4</a>. 
+
+The models were trained with <a href="https://github.com/HazyResearch/flash-attention">Flash Attention</a> and <a href="https://arxiv.org/abs/2212.10554">Xpos Rotary Embeddings</a> for better length extrapolation. The models have been uploaded to Torch hub and the files are additionally stored on the Huggingface hub. You can find the model each of the PyTorch model files here: <a href="https://huggingface.co/conceptofmind/palm-150m">PaLM-150m</a>, <a href="https://huggingface.co/conceptofmind/palm-410m">PaLM-410m</a>, <a href="https://huggingface.co/conceptofmind/palm-1b">PaLM-1b</a>. If the models are not downloading from Torch hub correctly be sure to clear out the checkpoint and model folders in `.cache/torch/hub/`. If that still does not resolve the issue then you can download the files from the Huggingface repositories. 
+
+All of the training data has been pre-tokenized with the GPTNEOX tokenizer and blocked at sequence lengths of 8192. This will help to save the large cost of preprocessing data. The datasets are available on Huggingface in parquet format and chunks here: <a href="https://huggingface.co/datasets/conceptofmind/c4_0-to-20_neox_with_eos_8k">C4 Chunk 1</a>, <a href="https://huggingface.co/datasets/conceptofmind/c4_21-to-40_neox_with_eos_8k">C4 Chunk 2</a>, <a href="https://huggingface.co/datasets/conceptofmind/c4_41-to-60_neox_with_eos_8k">C4 Chunk 3</a>, <a href="https://huggingface.co/datasets/conceptofmind/c4_61-to-80_neox_with_eos_8k">C4 Chunk 4</a>, and <a href="https://huggingface.co/datasets/conceptofmind/c4_81-to-100_neox_with_eos_8k">C4 Chunk 5</a>. This is also another option in the distributed training script to not used the provided pre-tokenized C4 dataset and instead load and process another dataset such as openwebtext.
 
 ## Installation
 Make sure you install the requirements before trying to run the models.
