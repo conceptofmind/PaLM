@@ -56,7 +56,13 @@ An example generation with the 410 million parameter model is:
 >The dog is just a little puppy that goes to the park. He is a super friendly dog. He has not had a bad mouth or bad breath
 
 ## Training
-I provide a distributed training script, `train_distributed.py` which was used to train each of the models. I used accelerate and slurm for multinode training. The models were trained on 64 A100 (80 GB) GPUs. You can freely change the model layers and hyperparameter configuration to meet your hardware requirements. The models were trained with <a href="https://github.com/HazyResearch/flash-attention">Flash Attention</a>, <a href="https://arxiv.org/abs/2212.10554">Xpos Rotary Embeddings</a> for better length extrapolation, and <a href="https://arxiv.org/abs/1911.02150">multi-query single-key-value attention</a> for more efficient decoding. I used decoupled weight decay Adam W for training. There is the option to use <a href="https://twitter.com/Mitchnw">Mitchell Wortsman's</a> Stable Adam W as well. I will be testing this for larger runs. Fine-tuning will be added in the very near future with additional exploration into LoRA.
+I provide a distributed training script, `train_distributed.py` which was used to train each of the models. I used accelerate and slurm for multinode training. The models were trained on 64 A100 (80 GB) GPUs. You can freely change the model layers and hyperparameter configuration to meet your hardware requirements. The models were trained with <a href="https://github.com/HazyResearch/flash-attention">Flash Attention</a>, <a href="https://arxiv.org/abs/2212.10554">Xpos Rotary Embeddings</a> for better length extrapolation, and <a href="https://arxiv.org/abs/1911.02150">multi-query single-key-value attention</a> for more efficient decoding. I used decoupled weight decay Adam W for training. There is the option to use <a href="https://twitter.com/Mitchnw">Mitchell Wortsman's</a> Stable Adam W as well. I will be testing this for larger runs. You are able to load the models weights and alter the training script to fine-tune the models. I will be adding a specific fine-tuning script in the very near future with exploration into LoRA.
+
+| Model Size | Num Tokens | Dim | Depth | Dim Head | Heads | Flash Attention |
+| -------- | ------- | ------- | ------- | ------- | ------- | ------- |
+| 150 M | 50304 | 768 | 12 | 128 | 8 | True
+| 410 M | 50304 | 1024 | 24 | 128 | 8 | True
+| 1 B | 50304 | 2048 | 16 | 128 | 8 | True
 
 ## Data
 You can preprocess a different dataset in a way similar to the C4 dataset used during training by running the `build_dataset.py` script. This will pre-tokenize, chunk the data in blocks of a specified sequence length, and upload to the Huggingface hub. For example:
