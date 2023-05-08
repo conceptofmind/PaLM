@@ -1,9 +1,13 @@
 # PaLM
 
+
 ## Acknowledgements
 - <a href="https://github.com/CarperAI">CarperAI</a>, <a href="https://twitter.com/lcastricato">Louis Castricato</a>, and <a href="https://stability.ai/">Stability.ai</a> for the very generous sponsorship to work on machine learning research.
 - <a href="https://github.com/lucidrains">Phil Wang (Lucidrains)</a> for his inspiring work and input on training and architectures.
 - <a href="https://twitter.com/dmayhem93">Dakota</a>, <a href="https://twitter.com/jonbtow">Guac</a>, <a href="https://twitter.com/zach_nussbaum">Zach</a>, and <a href="">Aman</a> for answering my questions about Huggingface and Slurm.
+
+## FAQ
+Three different size PaLM models have been trained on <a href="https://twitter.com/dmayhem93">C4</a>. The models have been uploaded to Torch hub and the files are also stored on the Huggingface hub. If the models are 
 
 ## Installation
 Make sure you install the requirements before trying to run the models.
@@ -13,17 +17,13 @@ pip3 install -r requirements.txt
 
 ## Usage
 To generate text with the models you can use the command line:
-- prompt - Text prompt to generate text
-- seq_len" default=256, help="Sequence length for generated text"
-- temperature", type=float, default=0.8, help="Sampling temperature"
-- filter_thres", type=float, default=0.9, help="Filter threshold for sampling"
-- model",
-        type=str,
-        default="palm_410m_8k_v0",
-        help="Model to use for generation",
-    )
+- prompt - Text prompt to generate text.
+- seq_len - Sequence length for generated text. Default is 256.
+- temperature - Sampling temperature. Default is 0.8.
+- filter_thres - Filter threshold for sampling. Default is 0.9.
+- model - Model to use for generation. There are three different model sizes (150m, 410m, 1b): "palm_150m_8k_v0", "palm_410m_8k_v0", and "palm_1b_8k_v0". Default is "palm_410m_8k_v0".
 
-```
+```bash
 python3 inference.py "My dog is very cute" --seq_len 256 --temperature 0.8 --filter_thres 0.9 --model "palm_410m_8k_v0"
 ```
 A generic inference script, `inference.py` is provided for you to play around with.
@@ -35,10 +35,14 @@ An example generation with the 410 million parameter model is:
 >The dog is very playful and they are a little spoiled. I am not sure if it's a dog thing or if he is spoiled. He loves his toys and just wants to play. He plays with his toys all the time and even goes on walks. He is a little picky, not very good with other dogs.
 >The dog is just a little puppy that goes to the park. He is a super friendly dog. He has not had a bad mouth or bad breath
 
+You can also load the pretrained models for additional training or fine-tuning by loading from Torch hub:
+
 
 
 
 ## Training
+
+## Data
 
 ## Experiments
 
