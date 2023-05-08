@@ -1,0 +1,7 @@
+torch>=2.0.0
+palm-rlhf-pytorch
+transformers
+datasets
+tokenizers
+hidet
+wandb

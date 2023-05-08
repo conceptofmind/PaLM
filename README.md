@@ -1,5 +1,5 @@
 # PaLM
-<a href=""></a>
+<img src="./palm.gif" width="450px"></img>
 
 ## Acknowledgements
 - <a href="https://github.com/CarperAI">CarperAI</a>, <a href="https://twitter.com/lcastricato">Louis Castricato</a>, and <a href="https://stability.ai/">Stability.ai</a> for the very generous sponsorship to work on machine learning research.
@@ -7,7 +7,7 @@
 - <a href="https://twitter.com/dmayhem93">Dakota</a>, <a href="https://twitter.com/jonbtow">Guac</a>, <a href="https://twitter.com/zach_nussbaum">Zach</a>, and <a href="">Aman</a> for providing information about Huggingface and Slurm. I typically only use Apex and DeepSpeed.
 
 ## FAQ
-Three different size PaLM models (150m, 410m, 1b) have been trained with 8k context length on all of <a href="https://huggingface.co/datasets/c4">C4</a>. A fourth 2b model is currently being trained. All of the models will be further instruction-tuned on FLAN to provide flan-PaLM models.
+Three different size PaLM models (150m, 410m, 1b) have been trained with 8k context length on all of <a href="https://huggingface.co/datasets/c4">C4</a>. A fourth 2b model is currently being trained. These are currently the baseline versions of the models and additional training will be done at a larger scale. All of the models will be further instruction-tuned on FLAN to provide flan-PaLM models.
 
 The models were trained with <a href="https://github.com/HazyResearch/flash-attention">Flash Attention</a>, <a href="https://arxiv.org/abs/2212.10554">Xpos Rotary Embeddings</a> for better length extrapolation, and <a href="https://arxiv.org/abs/1911.02150">multi-query single-key-value attention</a> for more efficient decoding. The models have been uploaded to Torch hub and the files are additionally stored on the Huggingface hub. You can find the model each of the PyTorch model files here: <a href="https://huggingface.co/conceptofmind/palm-150m">PaLM-150m</a>, <a href="https://huggingface.co/conceptofmind/palm-410m">PaLM-410m</a>, <a href="https://huggingface.co/conceptofmind/palm-1b">PaLM-1b</a>. If the models are not downloading from Torch hub correctly be sure to clear out the checkpoint and model folders in `.cache/torch/hub/`. If that still does not resolve the issue then you can download the files from the Huggingface repositories. 
 
@@ -58,11 +58,11 @@ An example generation with the 410 million parameter model is:
 ## Training
 I provide a distributed training script, `train_distributed.py` which was used to train each of the models. I used accelerate and slurm for multinode training. The models were trained on 64 A100 (80 GB) GPUs. You can freely change the model layers and hyperparameter configuration to meet your hardware requirements. The models were trained with <a href="https://github.com/HazyResearch/flash-attention">Flash Attention</a>, <a href="https://arxiv.org/abs/2212.10554">Xpos Rotary Embeddings</a> for better length extrapolation, and <a href="https://arxiv.org/abs/1911.02150">multi-query single-key-value attention</a> for more efficient decoding. I used decoupled weight decay Adam W for training. There is the option to use <a href="https://twitter.com/Mitchnw">Mitchell Wortsman's</a> Stable Adam W as well. I will be testing this for larger runs. You are able to load the models weights and alter the training script to fine-tune the models. I will be adding a specific fine-tuning script in the very near future with exploration into LoRA.
 
-| Model Size | Num Tokens | Dim | Depth | Dim Head | Heads | Flash Attention |
-| -------- | ------- | ------- | ------- | ------- | ------- | ------- |
-| 150 M | 50304 | 768 | 12 | 128 | 8 | True
-| 410 M | 50304 | 1024 | 24 | 128 | 8 | True
-| 1 B | 50304 | 2048 | 16 | 128 | 8 | True
+| Model Size | Num Tokens | Dim | Depth | Dim Head | Heads | Flash Attention | Learning Rate |
+| -------- | ------- | ------- | ------- | ------- | ------- | ------- | ------- |
+| 150 M | 50304 | 768 | 12 | 128 | 8 | True | 6e-4 |
+| 410 M | 50304 | 1024 | 24 | 128 | 8 | True | 3e-4 |
+| 1 B | 50304 | 2048 | 16 | 128 | 8 | True | 3e-4 |
 
 ## Data
 You can preprocess a different dataset in a way similar to the C4 dataset used during training by running the `build_dataset.py` script. This will pre-tokenize, chunk the data in blocks of a specified sequence length, and upload to the Huggingface hub. For example:
@@ -72,7 +72,29 @@ python3 build_dataset.py --seed 42 --seq_len 8192 --hf_account "your_hf_account"
 
 ## Experiments
 
-##
+I tried numerous different experiments related QK normalization, XPos, Stable Adam W, and long context training. I will be releasing logs and findings.
 
+## Citations 
 
-
+```bibtex
+@inproceedings{Chowdhery2022PaLMSL,
+    title   = {PaLM: Scaling Language Modeling with Pathways},
+    author  = {Aakanksha Chowdhery and Sharan Narang and Jacob Devlin and Maarten Bosma and Gaurav Mishra and Adam Roberts and Paul Barham and Hyung Won Chung and Charles Sutton and Sebastian Gehrmann and Parker Schuh and Kensen Shi and Sasha Tsvyashchenko and Joshua Maynez and Abhishek Rao and Parker Barnes and Yi Tay and Noam M. Shazeer and Vinodkumar Prabhakaran and Emily Reif and Nan Du and Benton C. Hutchinson and Reiner Pope and James Bradbury and Jacob Austin and Michael Isard and Guy Gur-Ari and Pengcheng Yin and Toju Duke and Anselm Levskaya and Sanjay Ghemawat and Sunipa Dev and Henryk Michalewski and Xavier Garc{\'i}a and Vedant Misra and Kevin Robinson and Liam Fedus and Denny Zhou and Daphne Ippolito and David Luan and Hyeontaek Lim and Barret Zoph and Alexander Spiridonov and Ryan Sepassi and David Dohan and Shivani Agrawal and Mark Omernick and Andrew M. Dai and Thanumalayan Sankaranarayana Pillai and Marie Pellat and Aitor Lewkowycz and Erica Oliveira Moreira and Rewon Child and Oleksandr Polozov and Katherine Lee and Zongwei Zhou and Xuezhi Wang and Brennan Saeta and Mark Diaz and Orhan Firat and Michele Catasta and Jason Wei and Kathleen S. Meier-Hellstern and Douglas Eck and Jeff Dean and Slav Petrov and Noah Fiedel},
+    year    = {2022}
+}
+```
+```bibtex
+@inproceedings{Sun2022ALT,
+    title     = {A Length-Extrapolatable Transformer},
+    author    = {Yutao Sun and Li Dong and Barun Patra and Shuming Ma and Shaohan Huang and Alon Benhaim and Vishrav Chaudhary and Xia Song and Furu Wei},
+    year      = {2022}
+}
+```
+```bibtex
+@inproceedings{dao2022flashattention,
+    title   = {Flash{A}ttention: Fast and Memory-Efficient Exact Attention with {IO}-Awareness},
+    author  = {Dao, Tri and Fu, Daniel Y. and Ermon, Stefano and Rudra, Atri and R{\'e}, Christopher},
+    booktitle = {Advances in Neural Information Processing Systems},
+    year    = {2022}
+}
+```
