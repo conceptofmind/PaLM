@@ -18,6 +18,8 @@ All of the training data has been pre-tokenized with the GPTNEOX tokenizer and b
 ## Installation
 Make sure you install the requirements before trying to run the models.
 ```bash
+git clone https://github.com/conceptofmind/PaLM.git
+cd PaLM/
 pip3 install -r requirements.txt
 ```
 
@@ -31,7 +33,7 @@ You can also load the PyTorch model checkpoints directly by:
 from palm_rlhf_pytorch import PaLM
 
 model = PaLM(
-    num_tokens=50304, dim=768, depth=12, dim_head=128, heads=8, flash_attn=True, #qk_rmsnorm = True,
+    num_tokens=50304, dim=1024, depth=24, dim_head=128, heads=8, flash_attn=True, qk_rmsnorm = False,
 ).cuda()
 
 model.load('/palm_410m_8k_v0.pt')
