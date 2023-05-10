@@ -23,15 +23,27 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="palm_410m_8k_v0",
+        default="palm_1b_8k_v0",
         help="Model to use for generation",
+    )
+
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="fp32",
+        help="Data type for the model: 'bf16', or 'fp32'",
     )
 
     args = parser.parse_args()
 
+
+    dtype = torch.float32
+    if args.dtype == 'bf16':
+        dtype = torch.bfloat16
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = torch.hub.load("conceptofmind/PaLM", args.model).to(device)
+    model = torch.hub.load("conceptofmind/PaLM", args.model).to(device).to(dtype)
 
     opt_model = torch.compile(model, backend="hidet")
 
