@@ -41,6 +41,7 @@ To generate text with the models you can use the command line:
 - seq_len - Sequence length for generated text. Default is 256.
 - temperature - Sampling temperature. Default is 0.8.
 - filter_thres - Filter threshold for sampling. Default is 0.9.
+- dtype - A flag that can be used to change the dtype of the model for inference with Flash Attention. Requires an A100 GPU.
 - model - Model to use for generation. There are three different model sizes (150m, 410m, 1b): "palm_150m_8k_v0", "palm_410m_8k_v0", and "palm_1b_8k_v0". Default is "palm_410m_8k_v0".
 
 ```bash
