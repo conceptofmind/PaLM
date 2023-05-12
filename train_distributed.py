@@ -1,33 +1,26 @@
 import math
 import multiprocessing
 import os
+from datetime import timedelta
 from functools import partial
 from itertools import chain
-from datetime import timedelta
 
 import torch
-from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-    checkpoint_wrapper,
-    CheckpointImpl,
-    apply_activation_checkpointing
-)
 from accelerate import Accelerator
 from accelerate.utils import InitProcessGroupKwargs
-from datasets import load_dataset, concatenate_datasets
+from datasets import concatenate_datasets, load_dataset
+from palm_rlhf_pytorch import PaLM
+from palm_rlhf_pytorch.palm import LayerNorm, ParallelTransformerBlock
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    CheckpointImpl, apply_activation_checkpointing, checkpoint_wrapper)
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import (
-    AutoTokenizer,
-    default_data_collator,
-    get_linear_schedule_with_warmup,
-    set_seed,
-)
+from transformers import (AutoTokenizer, default_data_collator,
+                          get_cosine_schedule_with_warmup,
+                          get_linear_schedule_with_warmup, set_seed)
 
-from palm_rlhf_pytorch import PaLM
-from palm_rlhf_pytorch.palm import LayerNorm, ParallelTransformerBlock
 from stable_adamw import StableAdamWUnfused
-
 
 # constants
 
@@ -56,14 +49,13 @@ def print_num_params(model, accelerator: Accelerator):
     accelerator.print(f"Number of parameters in model: {n_params}")
 
 
-def fsdp_activation_checkpointing(model, accelerator: Accelerator, offload_to_cpu=False):
+def fsdp_activation_checkpointing(
+    model, accelerator: Accelerator, offload_to_cpu=False
+):
 
     accelerator.print(f"Using FSDP activation checkpointing")
 
-    check_fn = lambda submodule: isinstance(
-        submodule,
-        ParallelTransformerBlock
-    )
+    check_fn = lambda submodule: isinstance(submodule, ParallelTransformerBlock)
 
     non_reentrant_wrapper = partial(
         checkpoint_wrapper,
@@ -74,6 +66,32 @@ def fsdp_activation_checkpointing(model, accelerator: Accelerator, offload_to_cp
     apply_activation_checkpointing(
         model, checkpoint_wrapper_fn=non_reentrant_wrapper, check_fn=check_fn
     )
+
+
+def get_lr_scheduler_with_warmup(
+    optimizer, scheduler_type, num_warmup_steps, max_train_steps, grad_accumulate_every
+):
+    NUM_WARMUP_STEPS = num_warmup_steps
+    GRADIENT_ACCUMULATE_EVERY = grad_accumulate_every
+
+    if scheduler_type == "linear":
+        return get_linear_schedule_with_warmup(
+            optimizer=optimizer,
+            num_warmup_steps=NUM_WARMUP_STEPS * GRADIENT_ACCUMULATE_EVERY,
+            num_training_steps=max_train_steps * GRADIENT_ACCUMULATE_EVERY,
+        )
+    elif scheduler_type == "cosine":
+        return get_cosine_schedule_with_warmup(
+            optimizer=optimizer,
+            num_warmup_steps=NUM_WARMUP_STEPS * GRADIENT_ACCUMULATE_EVERY,
+            num_training_steps=max_train_steps * GRADIENT_ACCUMULATE_EVERY,
+        )
+    else:
+        raise ValueError(
+            "Invalid scheduler_type. Expected 'linear' or 'cosine', got: {}".format(
+                scheduler_type
+            )
+        )
 
 
 # optimizers
@@ -152,16 +170,10 @@ def decoupled_optimizer(
 
     # Create a variable called optimizer that stores an instance of the optimizer.
     if use_adamw:
-        optimizer = AdamW(
-            grouped_params,
-            lr=learning_rate,
-            betas=(beta_1, beta_2),
-        )
+        optimizer = AdamW(grouped_params, lr=learning_rate, betas=(beta_1, beta_2),)
     else:
         optimizer = StableAdamWUnfused(
-            grouped_params,
-            lr=learning_rate,
-            betas=(beta_1, beta_2),
+            grouped_params, lr=learning_rate, betas=(beta_1, beta_2),
         )
 
     # Return the optimizer.
@@ -201,9 +213,7 @@ def build_dataloaders():
         return result
 
     train_dataset = tokenized_dataset.map(
-        group_texts,
-        batched=True,
-        num_proc=CFG.NUM_CPU,
+        group_texts, batched=True, num_proc=CFG.NUM_CPU,
     )
 
     return train_dataset
@@ -277,9 +287,7 @@ def main():
         train_dataset = build_dataloaders()
 
     train_loader = DataLoader(
-        train_dataset,
-        batch_size=CFG.BATCH_SIZE,
-        collate_fn=default_data_collator,
+        train_dataset, batch_size=CFG.BATCH_SIZE, collate_fn=default_data_collator,
     )
 
     # optimizer
@@ -304,10 +312,12 @@ def main():
     NUM_WARMUP_STEPS = int(max_train_steps * 0.01)
     accelerator.print(f"Num warmup steps: {NUM_WARMUP_STEPS}")
 
-    lr_scheduler = get_linear_schedule_with_warmup(
+    lr_scheduler = get_lr_scheduler_with_warmup(
         optimizer=optim,
-        num_warmup_steps=NUM_WARMUP_STEPS * CFG.GRADIENT_ACCUMULATE_EVERY,
-        num_training_steps=max_train_steps * CFG.GRADIENT_ACCUMULATE_EVERY,
+        scheduler_type="cosine",
+        num_warmup_steps=NUM_WARMUP_STEPS,
+        max_train_steps=max_train_steps,
+        grad_accumulate_every=CFG.GRADIENT_ACCUMULATE_EVERY,
     )
 
     # prepare
