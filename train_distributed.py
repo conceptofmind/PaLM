@@ -1,10 +1,16 @@
 import math
 import multiprocessing
 import os
+from functools import partial
 from itertools import chain
 from datetime import timedelta
 
 import torch
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    checkpoint_wrapper,
+    CheckpointImpl,
+    apply_activation_checkpointing
+)
 from accelerate import Accelerator
 from accelerate.utils import InitProcessGroupKwargs
 from datasets import load_dataset, concatenate_datasets
@@ -19,7 +25,7 @@ from transformers import (
 )
 
 from palm_rlhf_pytorch import PaLM
-from palm_rlhf_pytorch.palm import LayerNorm
+from palm_rlhf_pytorch.palm import LayerNorm, ParallelTransformerBlock
 from stable_adamw import StableAdamWUnfused
 
 
@@ -35,6 +41,7 @@ class CFG:
     SEQ_LEN: int = 8192
     NUM_CPU: int = multiprocessing.cpu_count()
     USE_PRETOKENIZED: bool = True
+    USE_ACTIVATION_CHECKPOINTING: bool = False
     RESUME_FROM_CHECKPOINT: str = None
     CHECKPOINTING_STEPS: int = 1000
     OUTPUT_DIR: str = "YOUR_OUTPUT_DIR"
@@ -47,6 +54,26 @@ class CFG:
 def print_num_params(model, accelerator: Accelerator):
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     accelerator.print(f"Number of parameters in model: {n_params}")
+
+
+def fsdp_activation_checkpointing(model, accelerator: Accelerator, offload_to_cpu=False):
+
+    accelerator.print(f"Using FSDP activation checkpointing")
+
+    check_fn = lambda submodule: isinstance(
+        submodule,
+        ParallelTransformerBlock
+    )
+
+    non_reentrant_wrapper = partial(
+        checkpoint_wrapper,
+        offload_to_cpu=offload_to_cpu,
+        checkpoint_impl=CheckpointImpl.NO_REENTRANT,
+    )
+
+    apply_activation_checkpointing(
+        model, checkpoint_wrapper_fn=non_reentrant_wrapper, check_fn=check_fn
+    )
 
 
 # optimizers
@@ -232,6 +259,9 @@ def main():
     ).to(accelerator.device)
 
     print_num_params(model, accelerator)
+
+    if CFG.USE_ACTIVATION_CHECKPOINTING:
+        fsdp_activation_checkpointing(model, accelerator)
 
     # dataloaders
 
