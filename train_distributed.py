@@ -57,7 +57,7 @@ def activation_checkpointing(
     model: torch.nn.Module,
     offload_to_cpu: bool = False,
     accelerator: Accelerator = None,
-) -> None:
+):
     """
     Apply activation checkpointing to a model.
 
@@ -83,7 +83,7 @@ def activation_checkpointing(
 
 
 def get_lr_scheduler_with_warmup(
-    optimizer,
+    optimizer: torch.optim.Optimizer,
     scheduler_type: str,
     num_warmup_steps: int,
     max_train_steps: int,
