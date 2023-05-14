@@ -12,13 +12,20 @@ from datasets import concatenate_datasets, load_dataset
 from palm_rlhf_pytorch import PaLM
 from palm_rlhf_pytorch.palm import LayerNorm, ParallelTransformerBlock
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-    CheckpointImpl, apply_activation_checkpointing, checkpoint_wrapper)
+    CheckpointImpl,
+    apply_activation_checkpointing,
+    checkpoint_wrapper,
+)
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import (AutoTokenizer, default_data_collator,
-                          get_cosine_schedule_with_warmup,
-                          get_linear_schedule_with_warmup, set_seed)
+from transformers import (
+    AutoTokenizer,
+    default_data_collator,
+    get_cosine_schedule_with_warmup,
+    get_linear_schedule_with_warmup,
+    set_seed,
+)
 
 from stable_adamw import StableAdamWUnfused
 
@@ -49,8 +56,8 @@ def print_num_params(model, accelerator: Accelerator):
     accelerator.print(f"Number of parameters in model: {n_params}")
 
 
-def fsdp_activation_checkpointing(
-    model, accelerator: Accelerator, offload_to_cpu=False
+def activation_checkpointing(
+    model, offload_to_cpu=False, accelerator: Accelerator = None
 ):
 
     accelerator.print(f"Using FSDP activation checkpointing")
@@ -69,11 +76,34 @@ def fsdp_activation_checkpointing(
 
 
 def get_lr_scheduler_with_warmup(
-    optimizer, scheduler_type, num_warmup_steps, max_train_steps, grad_accumulate_every
+    optimizer,
+    scheduler_type: str,
+    num_warmup_steps: int,
+    max_train_steps: int,
+    grad_accumulate_every: int = 1,
+    accelerator: Accelerator = None,
 ):
+    """
+    Get a learning rate scheduler with warmup.
+
+    Args:
+        optimizer (Optimizer): The optimizer for which to create the learning rate scheduler.
+        scheduler_type (str): The type of learning rate scheduler to create, either "linear" or "cosine".
+        num_warmup_steps (int): The number of warmup steps for the learning rate scheduler.
+        max_train_steps (int): The maximum number of training steps.
+        grad_accumulate_every (int, optional): The gradient accumulation factor. Defaults to 1.
+        accelerator (Accelerator, optional): The Accelerate library accelerator. Defaults to None.
+
+    Returns:
+        The learning rate scheduler with warmup.
+
+    Raises:
+        ValueError: If scheduler_type is not "linear" or "cosine".
+    """
     NUM_WARMUP_STEPS = num_warmup_steps
     GRADIENT_ACCUMULATE_EVERY = grad_accumulate_every
-
+    if accelerator is not None:
+        accelerator.print(f"Using {scheduler_type} lr scheduler")
     if scheduler_type == "linear":
         return get_linear_schedule_with_warmup(
             optimizer=optimizer,
@@ -228,6 +258,7 @@ def build_pre_tokenized():
     train_dataset = concatenate_datasets([d0, d1, d2, d3, d4])
     return train_dataset
 
+
 # main
 
 
@@ -280,7 +311,7 @@ def main():
     print_num_params(model, accelerator)
 
     if CFG.USE_ACTIVATION_CHECKPOINTING:
-        fsdp_activation_checkpointing(model, accelerator)
+        activation_checkpointing(model, accelerator)
 
     # dataloaders
 
