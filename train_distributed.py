@@ -9,23 +9,17 @@ import torch
 from accelerate import Accelerator
 from accelerate.utils import InitProcessGroupKwargs
 from datasets import concatenate_datasets, load_dataset
+from lion_pytorch import Lion
 from palm_rlhf_pytorch import PaLM
 from palm_rlhf_pytorch.palm import LayerNorm, ParallelTransformerBlock
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-    CheckpointImpl,
-    apply_activation_checkpointing,
-    checkpoint_wrapper,
-)
+    CheckpointImpl, apply_activation_checkpointing, checkpoint_wrapper)
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import (
-    AutoTokenizer,
-    default_data_collator,
-    get_cosine_schedule_with_warmup,
-    get_linear_schedule_with_warmup,
-    set_seed,
-)
+from transformers import (AutoTokenizer, default_data_collator,
+                          get_cosine_schedule_with_warmup,
+                          get_linear_schedule_with_warmup, set_seed)
 
 from stable_adamw import StableAdamWUnfused
 
@@ -62,7 +56,7 @@ def print_num_params(model, accelerator: Accelerator):
 def activation_checkpointing(
     model: torch.nn.Module,
     offload_to_cpu: bool = False,
-    accelerator: Accelerator = None
+    accelerator: Accelerator = None,
 ) -> None:
     """
     Apply activation checkpointing to a model.
@@ -74,10 +68,7 @@ def activation_checkpointing(
     """
     if accelerator is not None:
         accelerator.print(f"Using activation checkpointing")
-    check_fn = lambda submodule: isinstance(
-        submodule,
-        ParallelTransformerBlock
-    )
+    check_fn = lambda submodule: isinstance(submodule, ParallelTransformerBlock)
     non_reentrant_wrapper = partial(
         checkpoint_wrapper,
         offload_to_cpu=offload_to_cpu,
@@ -144,8 +135,39 @@ def get_lr_scheduler_with_warmup(
 
 
 def decoupled_optimizer(
-    model, learning_rate, weight_decay, beta_1, beta_2, use_adamw=False
+    model: torch.nn.Module,
+    learning_rate: float,
+    weight_decay: float,
+    beta_1: float,
+    beta_2: float,
+    optimizer_type: str,
+    use_fsdp: bool = True,
+    accelerator: Accelerator = None,
 ):
+    """
+    Decouples the optimizer from the training process.
+
+    This function sets up the optimizer for the model by creating two groups of parameters:
+    one for weight decay and one without weight decay. Then, it initializes the optimizer
+    with these two groups of parameters.
+
+    Args:
+        model (Module): The model whose parameters are optimized.
+        learning_rate (float): The learning rate for the optimizer.
+        weight_decay (float): The weight decay for the optimizer.
+        beta_1 (float): The exponential decay rate for the 1st moment estimates.
+        beta_2 (float): The exponential decay rate for the 2nd moment estimates.
+        optimizer_type (str): The type of the optimizer. Can be 'lion', 'adamw', or 'stable_adamw'.
+        use_fsdp (bool, optional): If True, the optimizer will work with fully sharded data parallelism. Defaults to True.
+        accelerator (Accelerator, optional): The accelerator from HuggingFace's Accelerate library. Defaults to None.
+
+    Returns:
+        Optimizer: The initialized optimizer.
+
+    Raises:
+        ValueError: If the optimizer type is not 'lion', 'adamw' or 'stable_adamw'.
+    """
+    accelerator.print(f"Using {optimizer_type} lr scheduler")
     # Create an empty dictionary called param_dict to store the model's named parameters.
     param_dict = {}
     # Iterate over the model's named parameters and populate the param_dict with key-value pairs.
@@ -157,13 +179,18 @@ def decoupled_optimizer(
     # Create an empty list to store the names of the LayerNorm and Embedding layer weights with no weight decay.
     no_decay = []
 
+    if use_fsdp:
+        exclude_module = "_fsdp_wrapped_module.token_emb"
+    else:
+        exclude_module = "token_emb"
+
     # Iterate through the named modules of the model.
     for module_name, module in model.named_modules():
         # Check if the current module is an instance of any of the desired types (LayerNorm or torch.nn.Embedding).
         for ndim in [LayerNorm, torch.nn.Embedding]:
             if isinstance(module, ndim):
                 # If torch.nn.Embedding, append its name with a ".weight" suffix to the no_decay list.
-                if module_name == "token_emb":
+                if module_name == exclude_module:
                     no_decay.append(f"{module_name}.weight")
                 else:
                     # If the module is an instance of LayerNorm
@@ -191,11 +218,17 @@ def decoupled_optimizer(
     # Create an empty list called decay_param to store the parameters with weight decay.
     decay_param = []
 
+    if use_fsdp:
+        exclude_param = "_fsdp_wrapped_module.to_logits.weight"
+    else:
+        exclude_param = "to_logits.weight"
+
     # Iterate over the decay list, which contains the names of the parameters with weight decay.
     for param in decay:
         # Check if the current parameter is not 'to_logits.weight'.
         # Append the corresponding parameter from param_dict to the decay_param list.
-        if param != "to_logits.weight":
+
+        if param != exclude_param:
             decay_param.append(param_dict[param])
 
     # Create an empty list called no_decay_param to store the parameters without weight decay.
@@ -215,11 +248,19 @@ def decoupled_optimizer(
     ]
 
     # Create a variable called optimizer that stores an instance of the optimizer.
-    if use_adamw:
+    if optimizer_type == "lion":
+        optimizer = Lion(grouped_params, lr=learning_rate, betas=(beta_1, beta_2),)
+    elif optimizer_type == "adamw":
         optimizer = AdamW(grouped_params, lr=learning_rate, betas=(beta_1, beta_2),)
-    else:
+    elif optimizer_type == "stable_adamw":
         optimizer = StableAdamWUnfused(
             grouped_params, lr=learning_rate, betas=(beta_1, beta_2),
+        )
+    else:
+        raise ValueError(
+            "Invalid optimizer_type. Expected 'lion', 'adamw' or 'stable_adamw', got: {}".format(
+                optimizer_type
+            )
         )
 
     # Return the optimizer.
@@ -230,6 +271,18 @@ def decoupled_optimizer(
 
 
 def build_dataloaders():
+    """
+    Build data loaders for training.
+
+    This function performs the following steps:
+    1. Load the tokenizer from the pretrained "EleutherAI/gpt-neox-20b" model.
+    2. Load the "openwebtext" dataset.
+    3. Tokenize the dataset, adding the end-of-sentence token to each text.
+    4. Process the tokenized dataset into chunks of a specified block size.
+
+    Returns:
+        Dataset: The processed dataset ready for training.
+    """
     tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
     dataset = load_dataset("openwebtext", split="train")
 
