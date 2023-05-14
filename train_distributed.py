@@ -56,23 +56,39 @@ def print_num_params(model, accelerator: Accelerator):
     accelerator.print(f"Number of parameters in model: {n_params}")
 
 
+# activation checkpointing
+
+
 def activation_checkpointing(
-    model, offload_to_cpu=False, accelerator: Accelerator = None
-):
+    model: torch.nn.Module,
+    offload_to_cpu: bool = False,
+    accelerator: Accelerator = None
+) -> None:
+    """
+    Apply activation checkpointing to a model.
 
-    accelerator.print(f"Using FSDP activation checkpointing")
-
-    check_fn = lambda submodule: isinstance(submodule, ParallelTransformerBlock)
-
+    Args:
+        model (Module): The model to which to apply activation checkpointing.
+        offload_to_cpu (bool, optional): Whether to offload the activations to CPU. Defaults to False.
+        accelerator (Accelerator, optional): The Accelerate library accelerator. Defaults to None.
+    """
+    if accelerator is not None:
+        accelerator.print(f"Using activation checkpointing")
+    check_fn = lambda submodule: isinstance(
+        submodule,
+        ParallelTransformerBlock
+    )
     non_reentrant_wrapper = partial(
         checkpoint_wrapper,
         offload_to_cpu=offload_to_cpu,
         checkpoint_impl=CheckpointImpl.NO_REENTRANT,
     )
-
     apply_activation_checkpointing(
         model, checkpoint_wrapper_fn=non_reentrant_wrapper, check_fn=check_fn
     )
+
+
+# learning rate scheduler
 
 
 def get_lr_scheduler_with_warmup(
