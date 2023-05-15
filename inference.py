@@ -1,4 +1,5 @@
 import torch
+import hidet
 from transformers import AutoTokenizer
 from einops._torch_specific import allow_ops_in_compiled_graph
 import argparse
@@ -43,7 +44,10 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = torch.hub.load("conceptofmind/PaLM", args.model).to(device).to(dtype)
+    model = torch.hub.load("conceptofmind/PaLM", args.model).to(device).to(dtype).eval()
+
+    hidet.torch.dynamo_config.use_tensor_core(True)
+    hidet.torch.dynamo_config.search_space(2) 
 
     opt_model = torch.compile(model, backend="hidet")
 
