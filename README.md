@@ -99,3 +99,10 @@ I tried numerous different experiments related QK normalization, XPos, Stable Ad
     year    = {2022}
 }
 ```
+```bibtex
+@misc{zhao2023pytorch,
+    title={PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel}, 
+    author={Yanli Zhao and Andrew Gu and Rohan Varma and Liang Luo and Chien-Chin Huang and Min Xu and Less Wright and Hamid Shojanazeri and Myle Ott and Sam Shleifer and Alban Desmaison and Can Balioglu and Bernard Nguyen and Geeta Chauhan and Yuchen Hao and Shen Li},
+    year={2023},
+}
+```
