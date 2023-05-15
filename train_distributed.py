@@ -6,6 +6,12 @@ from functools import partial
 from itertools import chain
 
 import torch
+from torch.distributed.fsdp import (
+    FullyShardedDataParallel,
+    MixedPrecision,
+    BackwardPrefetch,
+    ShardingStrategy,
+)
 from accelerate import Accelerator
 from accelerate.utils import InitProcessGroupKwargs
 from datasets import concatenate_datasets, load_dataset
@@ -379,8 +385,29 @@ def main():
 
     print_num_params(model, accelerator)
 
+    bf16_fsdp = MixedPrecision(
+        param_dtype=torch.bfloat16,
+        # Gradient communication precision.
+        reduce_dtype=torch.bfloat16,
+        # Buffer precision.
+        buffer_dtype=torch.bfloat16,
+    )
+
+    sharding_strat = ShardingStrategy.SHARD_GRAD_OP
+
+    model = FullyShardedDataParallel(
+        model,
+        mixed_precision=bf16_fsdp,
+        backward_prefetch=BackwardPrefetch.BACKWARD_PRE,
+        sharding_strategy=sharding_strat,
+        forward_prefetch=True,
+        use_orig_params=True
+    )
+
     if CFG.USE_ACTIVATION_CHECKPOINTING:
         activation_checkpointing(model, accelerator)
+
+    model = accelerator.prepare(model)
 
     # dataloaders
 
@@ -396,12 +423,14 @@ def main():
     # optimizer
 
     optim = decoupled_optimizer(
-        model,
-        learning_rate=CFG.LEARNING_RATE,
-        weight_decay=CFG.WEIGHT_DECAY,
-        beta_1=0.9,
-        beta_2=0.95,
-        use_adamw=False,
+        model=model,
+        learning_rate=CFG.LEARNING_RATE, 
+        weight_decay=CFG.WEIGHT_DECAY, 
+        beta_1=0.90, 
+        beta_2=0.95, 
+        optimizer_type='adamw',  
+        use_fsdp=True,
+        accelerator=accelerator
     )
 
     # Determine number of training steps
@@ -425,8 +454,8 @@ def main():
 
     # prepare
 
-    model, optim, train_loader, lr_scheduler = accelerator.prepare(
-        model, optim, train_loader, lr_scheduler
+    optim, train_loader, lr_scheduler = accelerator.prepare(
+        optim, train_loader, lr_scheduler
     )
 
     # checkpoint scheduler
