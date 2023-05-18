@@ -20,6 +20,12 @@ from palm_rlhf_pytorch import PaLM
 from palm_rlhf_pytorch.palm import LayerNorm, ParallelTransformerBlock
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
     CheckpointImpl, apply_activation_checkpointing, checkpoint_wrapper)
+
+from torch.distributed.fsdp.wrap import (
+    transformer_auto_wrap_policy,
+)
+
+
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -40,6 +46,7 @@ class CFG:
     WEIGHT_DECAY: float = 0.1
     SEQ_LEN: int = 8192
     NUM_CPU: int = multiprocessing.cpu_count()
+    USE_FSDP: bool = False
     USE_PRETOKENIZED: bool = True
     USE_ACTIVATION_CHECKPOINTING: bool = False
     RESUME_FROM_CHECKPOINT: str = None
@@ -83,6 +90,98 @@ def activation_checkpointing(
     apply_activation_checkpointing(
         model, checkpoint_wrapper_fn=non_reentrant_wrapper, check_fn=check_fn
     )
+
+
+# FSDP
+
+
+def fsdp(
+    model: torch.nn.Module,
+    auto_wrap: bool = False,
+    mp: str = "fp32",
+    shard_strat: str = "NO_SHARD",
+):
+    """
+    This function wraps a given PyTorch model with the FullyShardedDataParallel (FSDP) wrapper to enable efficient data parallelism and model sharding.
+
+    Args:
+        model (torch.nn.Module): The original PyTorch model to be wrapped with FSDP.
+        auto_wrap (bool, optional): If True, it enables automatic wrapping of the model's layers according to the transformer_auto_wrap_policy. Default is False.
+        mp (str, optional): The mixed precision mode to be used. Can be 'bf16' for BFloat16, 'fp16' for Float16 or 'fp32' for Float32 precision. Default is 'fp32'.
+        shard_strat (str, optional): The sharding strategy to be used. Can be 'SHARD_GRAD' for sharding at gradient computation, 'FULL_SHARD' for full model sharding or 'NO_SHARD' for no sharding. Default is 'NO_SHARD'.
+
+    Raises:
+        ValueError: If the provided mp (mixed precision mode) is not 'bf16', 'fp16' or 'fp32'.
+        ValueError: If the provided shard_strat (sharding strategy) is not 'SHARD_GRAD', 'FULL_SHARD' or 'NO_SHARD'.
+
+    Returns:
+        torch.nn.Module: The input model wrapped with FSDP.
+    """
+    if auto_wrap:
+        palm_auto_wrap_policy = partial(
+            transformer_auto_wrap_policy,
+            transformer_layer_cls={
+                ParallelTransformerBlock,
+            },
+        )
+    else:
+        palm_auto_wrap_policy = None
+
+    if mp == "bf16":
+        mp_fsdp = MixedPrecision(
+            param_dtype=torch.bfloat16,
+            # Gradient communication precision.
+            reduce_dtype=torch.bfloat16,
+            # Buffer precision.
+            buffer_dtype=torch.bfloat16,
+        )
+    elif mp == "fp16":
+        mp_fsdp = MixedPrecision(
+            param_dtype=torch.float16,
+            # Gradient communication precision.
+            reduce_dtype=torch.float16,
+            # Buffer precision.
+            buffer_dtype=torch.float16,
+        )
+    elif mp == "fp32":
+        mp_fsdp = MixedPrecision(
+            param_dtype=torch.float32,
+            # Gradient communication precision.
+            reduce_dtype=torch.float32,
+            # Buffer precision.
+            buffer_dtype=torch.float32,
+        )
+    else:
+        raise ValueError(
+            "Invalid scheduler_type. Expected 'bf16', 'fp16' or 'fp32', got: {}".format(
+                mp
+            )
+        )
+
+    if shard_strat == "SHARD_GRAD":
+        sharding_strat_fsdp = ShardingStrategy.SHARD_GRAD_OP 
+    elif shard_strat == "FULL_SHARD":
+        sharding_strat_fsdp = ShardingStrategy.FULL_SHARD
+    elif shard_strat == "NO_SHARD":
+        sharding_strat_fsdp = ShardingStrategy.NO_SHARD
+    else:
+        raise ValueError(
+            "Invalid scheduler_type. Expected 'SHARD_GRAD', 'FULL_SHARD' or 'NO_SHARD', got: {}".format(
+                shard_strat
+            )
+        )
+
+    model = FullyShardedDataParallel(
+        model,
+        auto_wrap_policy=palm_auto_wrap_policy,
+        mixed_precision=mp_fsdp,
+        backward_prefetch=BackwardPrefetch.BACKWARD_PRE,
+        sharding_strategy=sharding_strat_fsdp,
+        forward_prefetch=True,
+        use_orig_params=True,
+    )
+
+    return model
 
 
 # learning rate scheduler
@@ -173,7 +272,7 @@ def decoupled_optimizer(
     Raises:
         ValueError: If the optimizer type is not 'lion', 'adamw' or 'stable_adamw'.
     """
-    accelerator.print(f"Using {optimizer_type} lr scheduler")
+    accelerator.print(f"Using {optimizer_type} optimizer")
     # Create an empty dictionary called param_dict to store the model's named parameters.
     param_dict = {}
     # Iterate over the model's named parameters and populate the param_dict with key-value pairs.
@@ -380,29 +479,18 @@ def main():
         depth=16,
         dim_head=128,
         heads=8,
-        flash_attn=True,  # qk_rmsnorm = True,
+        flash_attn=True,
+        qk_rmsnorm=False,
     ).to(accelerator.device)
 
     print_num_params(model, accelerator)
 
-    bf16_fsdp = MixedPrecision(
-        param_dtype=torch.bfloat16,
-        # Gradient communication precision.
-        reduce_dtype=torch.bfloat16,
-        # Buffer precision.
-        buffer_dtype=torch.bfloat16,
-    )
-
-    sharding_strat = ShardingStrategy.SHARD_GRAD_OP
-
-    model = FullyShardedDataParallel(
-        model,
-        mixed_precision=bf16_fsdp,
-        backward_prefetch=BackwardPrefetch.BACKWARD_PRE,
-        sharding_strategy=sharding_strat,
-        forward_prefetch=True,
-        use_orig_params=True
-    )
+    if CFG.USE_FSDP:
+        model = fsdp(
+            model,
+            mp="bf16",
+            shard_strat="SHARD_GRAD"
+        )
 
     if CFG.USE_ACTIVATION_CHECKPOINTING:
         activation_checkpointing(model, accelerator)
