@@ -13,7 +13,8 @@ from torch.distributed.fsdp import (
     ShardingStrategy,
 )
 from accelerate import Accelerator
-from accelerate.utils import InitProcessGroupKwargs
+from accelerate.utils import (DummyOptim, DummyScheduler,
+                              InitProcessGroupKwargs)
 from datasets import concatenate_datasets, load_dataset
 from lion_pytorch import Lion
 from palm_rlhf_pytorch import PaLM
@@ -46,6 +47,7 @@ class CFG:
     WEIGHT_DECAY: float = 0.1
     SEQ_LEN: int = 8192
     NUM_CPU: int = multiprocessing.cpu_count()
+    USE_DEEPSPEED: bool = False
     USE_FSDP: bool = False
     USE_PRETOKENIZED: bool = True
     USE_ACTIVATION_CHECKPOINTING: bool = False
@@ -357,13 +359,15 @@ def decoupled_optimizer(
         optimizer = Lion(grouped_params, lr=learning_rate, betas=(beta_1, beta_2),)
     elif optimizer_type == "adamw":
         optimizer = AdamW(grouped_params, lr=learning_rate, betas=(beta_1, beta_2),)
+    elif optimizer_type == "deepspeed":
+        optimizer = DummyOptim(grouped_params, lr=learning_rate, betas=(beta_1, beta_2),)
     elif optimizer_type == "stable_adamw":
         optimizer = StableAdamWUnfused(
             grouped_params, lr=learning_rate, betas=(beta_1, beta_2),
         )
     else:
         raise ValueError(
-            "Invalid optimizer_type. Expected 'lion', 'adamw' or 'stable_adamw', got: {}".format(
+            "Invalid optimizer_type. Expected 'lion', 'adamw', 'deepspeed' or 'stable_adamw', got: {}".format(
                 optimizer_type
             )
         )
@@ -481,7 +485,7 @@ def main():
         heads=8,
         flash_attn=True,
         qk_rmsnorm=False,
-    ).to(accelerator.device)
+    )
 
     print_num_params(model, accelerator)
 
@@ -527,18 +531,24 @@ def main():
     accelerator.print(f"Max train steps: {max_train_steps}")
 
     # lr scheduler
-    # We cant decide on an actual number
 
     NUM_WARMUP_STEPS = int(max_train_steps * 0.01)
     accelerator.print(f"Num warmup steps: {NUM_WARMUP_STEPS}")
 
-    lr_scheduler = get_lr_scheduler_with_warmup(
-        optimizer=optim,
-        scheduler_type="cosine",
-        num_warmup_steps=NUM_WARMUP_STEPS,
-        max_train_steps=max_train_steps,
-        grad_accumulate_every=CFG.GRADIENT_ACCUMULATE_EVERY,
-    )
+    if CFG.USE_DEEPSPEED:
+        lr_scheduler = DummyScheduler(
+            optim, 
+            total_num_steps=max_train_steps * accelerator.num_processes, 
+            warmup_num_steps=NUM_WARMUP_STEPS
+        )
+    else:
+        lr_scheduler = get_lr_scheduler_with_warmup(
+            optimizer=optim,
+            scheduler_type="cosine",
+            num_warmup_steps=NUM_WARMUP_STEPS,
+            max_train_steps=max_train_steps,
+            grad_accumulate_every=CFG.GRADIENT_ACCUMULATE_EVERY,
+        )
 
     # prepare
 
