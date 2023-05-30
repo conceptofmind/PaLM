@@ -12,8 +12,12 @@ from torch.distributed.fsdp import (
     BackwardPrefetch,
     ShardingStrategy,
 )
+from accelerate import Accelerator
+from accelerate.utils import (DummyOptim, DummyScheduler,
+                              InitProcessGroupKwargs)
 from datasets import concatenate_datasets, load_dataset
-from palm_rlhf_pytorch.palm import PaLM
+from lion_pytorch import Lion
+from palm_rlhf_pytorch import PaLM
 from palm_rlhf_pytorch.palm import LayerNorm, ParallelTransformerBlock
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
     CheckpointImpl, apply_activation_checkpointing, checkpoint_wrapper)
@@ -22,6 +26,7 @@ from torch.distributed.fsdp.wrap import (
     transformer_auto_wrap_policy,
 )
 
+
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -29,28 +34,35 @@ from transformers import (AutoTokenizer, default_data_collator,
                           get_cosine_schedule_with_warmup,
                           get_linear_schedule_with_warmup, set_seed)
 
-from stable_adamw import StableAdamWUnfused
-from palm.utils import print_num_params
+from palm.stable_adamw import StableAdamWUnfused
 
 # constants
 
 
 class CFG:
-    BATCH_SIZE: int = 2
-    GRADIENT_ACCUMULATE_EVERY: int = 2
+    BATCH_SIZE: int = 3
+    GRADIENT_ACCUMULATE_EVERY: int = 1
     SEED: int = 42
-    LEARNING_RATE: float = 1.6e-4
+    LEARNING_RATE: float = 3e-4
     WEIGHT_DECAY: float = 0.1
     SEQ_LEN: int = 8192
     NUM_CPU: int = multiprocessing.cpu_count()
-    USE_DEEPSPEED: bool = True
+    USE_DEEPSPEED: bool = False
     USE_FSDP: bool = False
     USE_PRETOKENIZED: bool = True
     USE_ACTIVATION_CHECKPOINTING: bool = False
-    RESUME_FROM_CHECKPOINT: str = "/step_55800"
-    CHECKPOINTING_STEPS: int = 100
-    OUTPUT_DIR: str = "/save_dir"
-    ENTITY_NAME: str = "a_man_chooses"
+    RESUME_FROM_CHECKPOINT: str = None
+    CHECKPOINTING_STEPS: int = 1000
+    OUTPUT_DIR: str = "YOUR_OUTPUT_DIR"
+    ENTITY_NAME: str = "YOUR_ENTITY_NAME"
+
+
+# helpers
+
+
+def print_num_params(model, accelerator: Accelerator):
+    n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    accelerator.print(f"Number of parameters in model: {n_params}")
 
 
 # activation checkpointing
@@ -182,7 +194,7 @@ def get_lr_scheduler_with_warmup(
     scheduler_type: str,
     num_warmup_steps: int,
     max_train_steps: int,
-    grad_accumulate_every: int = 2,
+    grad_accumulate_every: int = 1,
     accelerator: Accelerator = None,
 ):
     """
@@ -235,8 +247,8 @@ def decoupled_optimizer(
     weight_decay: float,
     beta_1: float,
     beta_2: float,
-    optimizer_type: str = "deepspeed",
-    use_fsdp: bool = False,
+    optimizer_type: str,
+    use_fsdp: bool = True,
     accelerator: Accelerator = None,
 ):
     """
@@ -267,7 +279,6 @@ def decoupled_optimizer(
     param_dict = {}
     # Iterate over the model's named parameters and populate the param_dict with key-value pairs.
     for param_name, param in model.named_parameters():
-        print(param_name)
         param_dict[param_name] = param
 
     # Separate the model's named modules into two groups: decay and no_decay.
@@ -278,7 +289,7 @@ def decoupled_optimizer(
     if use_fsdp:
         exclude_module = "_fsdp_wrapped_module.token_emb"
     else:
-        exclude_module = "module.token_emb"
+        exclude_module = "token_emb"
 
     # Iterate through the named modules of the model.
     for module_name, module in model.named_modules():
@@ -317,7 +328,7 @@ def decoupled_optimizer(
     if use_fsdp:
         exclude_param = "_fsdp_wrapped_module.to_logits.weight"
     else:
-        exclude_param = "module.to_logits.weight"
+        exclude_param = "to_logits.weight"
 
     # Iterate over the decay list, which contains the names of the parameters with weight decay.
     for param in decay:
@@ -460,17 +471,23 @@ def main():
 
     # instantiate palm
 
+    # 410m
+    # model = PaLM(
+    #     num_tokens=50304, dim=1024, depth=24, dim_head=128, heads=8, flash_attn=True, #qk_rmsnorm = True,
+    # ).to(accelerator.device)
+
     # 1B
     model = PaLM(
         num_tokens=50304,
-        dim=2560,
-        depth=32,
+        dim=2048,
+        depth=16,
         dim_head=128,
-        heads=24,
+        heads=8,
         flash_attn=True,
+        qk_rmsnorm=False,
     )
 
-    print_num_params(model)
+    print_num_params(model, accelerator)
 
     if CFG.USE_FSDP:
         model = fsdp(
@@ -503,8 +520,8 @@ def main():
         weight_decay=CFG.WEIGHT_DECAY, 
         beta_1=0.90, 
         beta_2=0.95, 
-        optimizer_type='deepspeed',  
-        use_fsdp=False,
+        optimizer_type='adamw',  
+        use_fsdp=True,
         accelerator=accelerator
     )
 
@@ -518,14 +535,20 @@ def main():
     NUM_WARMUP_STEPS = int(max_train_steps * 0.01)
     accelerator.print(f"Num warmup steps: {NUM_WARMUP_STEPS}")
 
-
-    lr_scheduler = get_lr_scheduler_with_warmup(
-        optimizer=optim,
-        scheduler_type="cosine",
-        num_warmup_steps=NUM_WARMUP_STEPS,
-        max_train_steps=max_train_steps,
-        grad_accumulate_every=CFG.GRADIENT_ACCUMULATE_EVERY,
-    )
+    if CFG.USE_DEEPSPEED:
+        lr_scheduler = DummyScheduler(
+            optim, 
+            total_num_steps=max_train_steps * accelerator.num_processes, 
+            warmup_num_steps=NUM_WARMUP_STEPS
+        )
+    else:
+        lr_scheduler = get_lr_scheduler_with_warmup(
+            optimizer=optim,
+            scheduler_type="cosine",
+            num_warmup_steps=NUM_WARMUP_STEPS,
+            max_train_steps=max_train_steps,
+            grad_accumulate_every=CFG.GRADIENT_ACCUMULATE_EVERY,
+        )
 
     # prepare
 
@@ -566,7 +589,7 @@ def main():
         # need to multiply `gradient_accumulation_steps` to reflect real steps
         resume_step = (
             int(training_difference.replace("step_", ""))
-            #* CFG.GRADIENT_ACCUMULATE_EVERY
+            * CFG.GRADIENT_ACCUMULATE_EVERY
         )
 
     if CFG.RESUME_FROM_CHECKPOINT and resume_step is not None:
