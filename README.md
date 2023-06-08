@@ -7,6 +7,8 @@
 - <a href="https://twitter.com/dmayhem93">Dakota ("He berk reacted once")</a>, <a href="https://twitter.com/jonbtow">Guac</a>, <a href="https://twitter.com/zach_nussbaum">Zach</a>, and <a href="https://twitter.com/aman_gif">Aman</a> for providing information about Huggingface and Slurm. I typically only use Apex and DeepSpeed.
 
 ## FAQ
+This work is based on Lucidrain's [PaLM-rlhf-pytorch](https://github.com/lucidrains/PaLM-rlhf-pytorch). Please be sure to donate to Phil's work: https://github.com/sponsors/lucidrains#sponsors
+
 Three different size PaLM models (150m, 410m, 1b) have been trained with 8k context length on all of <a href="https://huggingface.co/datasets/c4">C4</a>. The models are compatible with Lucidrain's <a href="https://github.com/lucidrains/toolformer-pytorch">Toolformer-pytorch</a>, <a href="https://github.com/lucidrains/PaLM-pytorch">PaLM-pytorch</a>, and <a href="https://github.com/lucidrains/PaLM-rlhf-pytorch">PaLM-rlhf-pytorch</a>. A fourth 2b model is currently being trained. These are currently the baseline versions of the models and additional training will be done at a larger scale. All of the models will be further instruction-tuned on FLAN to provide flan-PaLM models.
 
 The models were trained with <a href="https://github.com/HazyResearch/flash-attention">Flash Attention</a>, <a href="https://arxiv.org/abs/2212.10554">Xpos Rotary Embeddings</a> for better length extrapolation, and <a href="https://arxiv.org/abs/1911.02150">multi-query single-key-value attention</a> for more efficient decoding. The models have been uploaded to Torch hub and the files are additionally stored on the Huggingface hub. You can find the model each of the PyTorch model files here: <a href="https://huggingface.co/conceptofmind/palm-150m">PaLM-150m</a>, <a href="https://huggingface.co/conceptofmind/palm-410m">PaLM-410m</a>, <a href="https://huggingface.co/conceptofmind/palm-1b">PaLM-1b</a>. If the models are not downloading from Torch hub correctly be sure to clear out the checkpoint and model folders in `.cache/torch/hub/`. If that still does not resolve the issue then you can download the files from the Huggingface repositories. Huggingface integration is currently a work-in-progress.
@@ -53,7 +55,7 @@ To generate text with the models you can use the command line:
 - temperature - Sampling temperature. Default is 0.8.
 - filter_thres - Filter threshold for sampling. Default is 0.9.
 - dtype - A flag that can be used to change the dtype of the model for inference with Flash Attention. Requires an A100 GPU.
-- model - Model to use for generation. There are three different model sizes (150m, 410m, 1b): "palm_150m_8k_v0", "palm_410m_8k_v0", and "palm_1b_8k_v0". Default is "palm_410m_8k_v0".
+- model - Model to use for generation. There are three different model sizes (150m, 410m, 1b, 2.1b): "palm_150m_8k_v0", "palm_410m_8k_v0", "palm_1b_8k_v0", and "palm_2b_8k_v0". Default is "palm_410m_8k_v0".
 
 ```bash
 python3 inference.py "My dog is very cute" --seq_len 256 --temperature 0.8 --filter_thres 0.9 --model "palm_410m_8k_v0"
