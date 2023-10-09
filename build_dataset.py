@@ -2,10 +2,9 @@ import multiprocessing
 import argparse
 from itertools import chain
 from datasets import load_dataset
-from transformers import AutoTokenizer, set_seed
+from transformers import AutoTokenizer
 
 def main(args):
-    set_seed(args.seed)
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
     train_dataset = load_dataset(args.dataset_name, split="train", data_dir=args.data_dir)
 
@@ -47,7 +46,6 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Process and push dataset to Hugging Face Hub")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--seq_len", type=int, default=8192, help="Sequence length for processing")
     parser.add_argument("--hf_account_repo", type=str, default="YOUR HF ACCOUNT/REPO NAME", help="Hugging Face account name and repo")
     parser.add_argument("--tokenizer", type=str, default="EleutherAI/gpt-neox-20b", help="Tokenizer model to use")
