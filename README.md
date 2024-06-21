@@ -13,7 +13,6 @@ Four different size PaLM models (150m, 410m, 1b, 2.1b) have been trained with 8k
 
 The models were trained with <a href="https://github.com/HazyResearch/flash-attention">Flash Attention</a>, <a href="https://arxiv.org/abs/2212.10554">Xpos Rotary Embeddings</a> for better length extrapolation, and <a href="https://arxiv.org/abs/1911.02150">multi-query single-key-value attention</a> for more efficient decoding. The models have been uploaded to Torch hub and the files are additionally stored on the Huggingface hub. You can find the model each of the PyTorch model files here: <a href="https://huggingface.co/conceptofmind/palm-150m">PaLM-150m</a>, <a href="https://huggingface.co/conceptofmind/palm-410m">PaLM-410m</a>, <a href="https://huggingface.co/conceptofmind/palm-1b">PaLM-1b</a>, <a href="https://huggingface.co/conceptofmind/palm-2b">PaLM-2b</a>. If the models are not downloading from Torch hub correctly be sure to clear out the checkpoint and model folders in `.cache/torch/hub/`. If that still does not resolve the issue then you can download the files from the Huggingface repositories. Huggingface integration is currently a work-in-progress.
 
-All of the training data has been pre-tokenized with the GPTNEOX tokenizer and blocked at sequence lengths of 8192. This will help to save the large cost of preprocessing data. The datasets are available on Huggingface in parquet format and chunks here: <a href="https://huggingface.co/datasets/conceptofmind/c4_0-to-20_neox_with_eos_8k">C4 Chunk 1</a>, <a href="https://huggingface.co/datasets/conceptofmind/c4_21-to-40_neox_with_eos_8k">C4 Chunk 2</a>, <a href="https://huggingface.co/datasets/conceptofmind/c4_41-to-60_neox_with_eos_8k">C4 Chunk 3</a>, <a href="https://huggingface.co/datasets/conceptofmind/c4_61-to-80_neox_with_eos_8k">C4 Chunk 4</a>, and <a href="https://huggingface.co/datasets/conceptofmind/c4_81-to-100_neox_with_eos_8k">C4 Chunk 5</a>. There is also another option in the distributed training script to not used the provided pre-tokenized C4 dataset and instead load and process another dataset such as openwebtext.
 
 ## Installation
 Make sure you install the requirements before trying to run the models.
@@ -82,12 +81,6 @@ I provide a distributed training script, `train_distributed.py` which was used t
 | 410 M | 50304 | 1024 | 24 | 128 | 8 | True | 3e-4 |
 | 1 B | 50304 | 2048 | 16 | 128 | 8 | True | 3e-4 |
 | 2.1 B | 50304 | 2560 | 24 | 128 | 8 | True | 1.8e-4 |
-
-## Data
-You can preprocess a different dataset in a way similar to the C4 dataset used during training by running the `build_dataset.py` script. This will pre-tokenize, chunk the data in blocks of a specified sequence length, and upload to the Huggingface hub. For example:
-```bash
-python3 build_dataset.py --seed 42 --seq_len 8192 --hf_account "your_hf_account" --tokenizer "EleutherAI/gpt-neox-20b" --dataset_name "EleutherAI/the_pile_deduplicated"
-```
 
 ## Experiments
 
